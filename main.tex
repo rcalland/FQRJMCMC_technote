@@ -24,6 +24,7 @@
 % \usepackage[parfill]{parskip} % Activate to begin paragraphs with an empty line rather than an indent
 
 %%% PACKAGES
+\usepackage{hyperref}
 \usepackage{booktabs} % for much better looking tables
 \usepackage{array} % for better arrays (eg matrices) in maths
 \usepackage{paralist} % very flexible & customisable lists (eg. enumerate/itemize, etc.)
@@ -60,10 +61,11 @@
 
 \begin{document}
 \maketitle
+This document describes the modelling of a  neutrino event inside a water cherenkov detector in a Bayesian construction, using fiTQun to calculate the likelihood terms. First, the motivation for such an analysis is discussed, along with the introduction of the concepts involved. Then, the model will be explained along with choices of priors, and finally the specific implementation of the sampler will  be described, along with the derivations of acceptance probabilities.
 
 \section{Motivation}
 \subsection{Current fiTQun method}
-fiTQun in its current state constructs a joint likelihood from charge and time information, and maximizes this using the SIMPLEX routine~\cite{SIMPLEX}. In the case when there are multiple rings inside an event, the current strategy is to perform a series of fits increasing the number of rings each time, and use the resulting likelihood to decide which fit performed better. This method runs into problems as the number of rings increases, and in order to feasibly run this fit, the number of parameters are reduced by assuming all rings share a common vertex.
+fiTQun in its current state constructs a joint likelihood from charge and time information, and maximizes this using the SIMPLEX routine~\cite{SIMPLEX}. In the case when there are multiple rings inside an event, the current strategy is to perform a series of fits increasing the number of rings each time, and using the resulting likelihood to decide which fit performed better. This method runs into problems as the number of rings increases, and in order to feasibly run this fit, the number of parameters are reduced by assuming all rings share a common vertex.
 
 \subsection{Proposed changes}
 Another approach to solving the multi-ring problem is to replace SIMPLEX with another method. By constructing the problem as a Mixture model, where each ring is a component of the mixture, we can sample the Posterior probability using a suitable method (that allows the addition/removal of components). The maximum of the Posterior probability will provide the most likely configuration of rings given a data set.
@@ -71,21 +73,19 @@ Another approach to solving the multi-ring problem is to replace SIMPLEX with an
 \section{The Mixture Model and Sampler}
 A mixture model is a summation of PDFs that are weighted, such that the total weight always sums to 1: 
 
-\begin{equation}
+\begin{equation}\label{eq:mm}
 f_{total} = \sum_{i=1}^{i=k}\omega_{i}f(\theta_{i}) \qquad \sum_{i=1}^{i=k}\omega_{i} = 1
 \end{equation}
 
-where $\omega_{i}$ is the weight of component $i$, $\theta_{i}$ are the parameters describing component $i$, for a total of $k$ components. The constraint that all weights sum to 1 means that probability is conserved even when the number of components is changed.
+where $\omega_{i}$ is the weight of component $i$ and $\theta_{i}$ are the parameters describing component $i$, for a total of $k$ components. The constraint that all weights sum to 1 means that probability is conserved even when the number of components is changed.
 
 \subsection{Reversible Jump Sampler}
 In order to sample the mixture model, a trans-dimensional sampler must be used. This means that the sampler must be able to add or remove components from the mixture, effectively changing the number of parameters. 
 The usual Markov chain Monte Carlo (MCMC) approach to sampling is to use the Metropolis-Hastings acceptance probability, accepting a new step with probability:
-
 \begin{equation}
 P_{accept} = min(1,a)
 \end{equation}
 where $a$ is defined as
-
 \begin{equation}
 a_{mh} = \frac{l(d|\theta')p(\theta')q(\theta|\theta')}{ l(d|\theta)p(\theta)q(\theta'|\theta)}
 \end{equation}
@@ -93,12 +93,24 @@ where $\theta$ are the parameters of the current model, $\theta'$ the parameters
 
 This holds for any samples that are proposed within the model. The Reversible Jump MCMC sampler allows jumps between models with different numbers of parameters, accepting said moves using:
 
-\begin{equation}
+\begin{equation}\label{eq:rj_a}
 a_{rj} = \frac{l(d|\theta')p(\theta')}{l(d|\theta)p(\theta)q(u)}|J|
 \end{equation}
 where there are dimension matching terms in the form of $q(u)$ to account for the different number of parameters of each model. In addition, a Jacobian term $J$ is used to adjust the probability measure according to the parameter transformations, however this term is often 1 and can be safely ignored.
 
-To elaborate further on the reversible jump move, we will consider an example. Typically to add a new ring to the model, the new ring parameters are constructed using random numbers $u\sim g()$, which are then turned into the ring parameters via a transformation of the current model parameters $\theta_{new} = h(u,\theta)$.
+To elaborate further on the reversible jump move, we will consider an example. Typically to add a new ring to the model, the new ring parameters are constructed using random numbers $u\sim g()$ (meaning, $u$ is drawn from the distribution $g()$), which are then turned into the ring parameters via a transformation of the current model parameters $\theta_{new} = f(u,\theta)$. If we draw the new ring parameters direct from the prior distributions, then $\theta_{new} = u\sim p()$, and we can replace $q(u)$ in~\ref{eq:rj_a} with $p(\theta_{new})$. Now, we have $p(\theta')=p(\theta)+p(\theta_{new})$, where the $p(\theta_{new})$ term cancels with the proposal function $q(u) = p(\theta_{new})$ on the denominator. As there are no transformation of variables involved, the Jacobian term is 1, thus, the acceptance probility reduces to a simple likelihood ratio for this move. For the cases where new ring parameters are not drawn from the prior distribution, the $q(u)$ and $J$ terms ensure detailed balance in the chain.
+
+\section{A Bayesian Model for Reconstructing Cherenkov Rings in an Event}
+In fiTQun, the predicted charge and time for each ring are parameterized as having a vertex $x,y,z,t$, direction $\theta,\phi$, momentum $p$ and particle identification (PID) $PID$ (discrete variable). To allow the chain to mix properly between different states of PID and momentum, we reparameterize such that there is a global visible energy $E_{vis}$ parameter, which is distributed amongst the rings using the component weight $w{i}$ from~\ref{eq:mm}. Using the rings visible energy $E_{vis}w_{i}$, the momentum is determined by considering the momentum threshold of the PID:
+
+\begin{equation}
+p = p_{thr}(PID) + Energy2Momentum(E_{vis}w_{i}, PID)
+\end{equation}
+
+In this construction, the number of rings (components) $k$ is not fixed; it is allowed to change depending on the reversible jump sampler to propose correct transitions from $k$ to $k\pm1$ components. Therefore, as a variable, we choose a poisson prior with a mean of 1 for $k$.
+The weights $w$ of all rings must always sum to unity. To enforce this, we choose a Dirichlet prior for $w$. 
+
+
 
 \bibliography{bib}{}
 \bibliographystyle{plain}
