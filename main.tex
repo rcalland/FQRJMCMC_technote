@@ -100,17 +100,45 @@ where there are dimension matching terms in the form of $q(u)$ to account for th
 
 To elaborate further on the reversible jump move, we will consider an example. Typically to add a new ring to the model, the new ring parameters are constructed using random numbers $u\sim g()$ (meaning, $u$ is drawn from the distribution $g()$), which are then turned into the ring parameters via a transformation of the current model parameters $\theta_{new} = f(u,\theta)$. If we draw the new ring parameters direct from the prior distributions, then $\theta_{new} = u\sim p()$, and we can replace $q(u)$ in~\ref{eq:rj_a} with $p(\theta_{new})$. Now, we have $p(\theta')=p(\theta)+p(\theta_{new})$, where the $p(\theta_{new})$ term cancels with the proposal function $q(u) = p(\theta_{new})$ on the denominator. As there are no transformation of variables involved, the Jacobian term is 1, thus, the acceptance probility reduces to a simple likelihood ratio for this move. For the cases where new ring parameters are not drawn from the prior distribution, the $q(u)$ and $J$ terms ensure detailed balance in the chain.
 
-\section{A Bayesian Model for Reconstructing Cherenkov Rings in an Event}
-In fiTQun, the predicted charge and time for each ring are parameterized as having a vertex $x,y,z,t$, direction $\theta,\phi$, momentum $p$ and particle identification (PID) $PID$ (discrete variable). To allow the chain to mix properly between different states of PID and momentum, we reparameterize such that there is a global visible energy $E_{vis}$ parameter, which is distributed amongst the rings using the component weight $w{i}$ from~\ref{eq:mm}. Using the rings visible energy $E_{vis}w_{i}$, the momentum is determined by considering the momentum threshold of the PID:
+\section{A Bayesian Model for Cherenkov Rings in a Neutrino Event}
+In fiTQun, the predicted charge and time for each ring are parameterized as having a vertex $x,y,z,t$, direction $\theta,\phi$, momentum $p$ and particle identification (PID) $PID$ (discrete variable).
+
+The vertex position parameters have Gaussian priors centered at 0, with a width equal to the diagonal distance across the SK tank for position, and the vertex time parameter has a mean of 1000 $ns$ with a width the size of the time window (usually around 500 $ns$).
+
+The direction paramters use spherical coordinates, and have a prior that loses probability near the poles.
+
+\begin{equation}
+i am a spherical prior
+\end{equation}
+
+To allow the chain to mix properly between different states of PID and momentum, we reparameterize such that there is a global visible energy $E_{vis}$ parameter, which is distributed amongst the rings using the component weight $w_{i}$ from~\ref{eq:mm}. Using the rings visible energy $E_{vis}w_{i}$, the momentum is determined by considering the momentum threshold of the PID:
 
 \begin{equation}
 p = p_{thr}(PID) + Energy2Momentum(E_{vis}w_{i}, PID)
 \end{equation}
 
+The weights $w$ of all rings must always sum to unity. To enforce this, we choose a Dirichlet prior for $w$. $E_{vis}$ has a Gaussian prior centered at 1000 with a width of $x$. The momentum $p$ is now a function of $E_{vis}$, $w_{i}$ and $PID$, so it does not receive its own prior.
+
 In this construction, the number of rings (components) $k$ is not fixed; it is allowed to change depending on the reversible jump sampler to propose correct transitions from $k$ to $k\pm1$ components. Therefore, as a variable, we choose a poisson prior with a mean of 1 for $k$.
-The weights $w$ of all rings must always sum to unity. To enforce this, we choose a Dirichlet prior for $w$. 
 
+The PID parameter is a discrete positive integer, with each value having equal probability.
 
+\section{Sampler Move Types}
+\subsection{Within Model Move}
+\subsection{Between Model Move}
+\subsubsection{Birth Move}
+The birth move adds a ring to the model using one of the birth moves explained below.
+\subsubsection{Death Move}
+The death move removes a randomly selected ring from the model.
+\subsubsection{Draw from Prior Birth Move}
+\subsubsection{Add-on-end Birth Move}
+There is a high likelihood that multi ring events will have ring vertices downstream from other rings. We can construct a more efficient move to take advantage of this knowledge, by proposing new vertex position $v'$ and time $t'$ parameters along the direction of a ring chosen at random:
+
+\begin{equation}
+u\sim g() \qquad v' = v + ud\qquad t' = t + (ud)n_{wtr}c^{-1}.
+\end{equation}
+
+All other parameters are drawn from the prior, and are simple to implement.
 
 \bibliography{bib}{}
 \bibliographystyle{plain}
