@@ -30,6 +30,7 @@
 \usepackage{paralist} % very flexible & customisable lists (eg. enumerate/itemize, etc.)
 \usepackage{verbatim} % adds environment for commenting out blocks of text & for better verbatim
 \usepackage{subfig} % make it possible to include more than one captioned figure/table in a single float
+\usepackage{setspace}
 % These packages are all incorporated in the memoir class to one degree or another...
 
 %%% HEADERS & FOOTERS
@@ -79,29 +80,29 @@ f_{total} = \sum_{i=1}^{i=k}\omega_{i}f(\theta_{i}) \qquad \sum_{i=1}^{i=k}\omeg
 
 where $\omega_{i}$ is the weight of component $i$ and $\theta_{i}$ are the parameters describing component $i$, for a total of $k$ components. The constraint that all weights sum to 1 means that probability is conserved even when the number of components is changed.
 
-\subsection{Reversible Jump Sampler}
+\subsection{Reversible Jump Sampler}\label{rjsampler}
 In order to sample the mixture model, a trans-dimensional sampler must be used. This means that the sampler must be able to add or remove components from the mixture, effectively changing the number of parameters. 
 The usual Markov chain Monte Carlo (MCMC) approach to sampling is to use the Metropolis-Hastings acceptance probability, accepting a new step with probability:
-\begin{equation}
+\begin{equation}\label{eq:ap}
 P_{accept} = min(1,a)
 \end{equation}
 where $a$ is defined as
-\begin{equation}
-a_{mh} = \frac{l(d|\theta')p(\theta')q(\theta|\theta')}{ l(d|\theta)p(\theta)q(\theta'|\theta)}
+\begin{equation}\label{eq:mh}
+a_{mh} = \frac{l(x|\theta')p(\theta')q(\theta|\theta')}{ l(x|\theta)p(\theta)q(\theta'|\theta)}
 \end{equation}
-where $\theta$ are the parameters of the current model, $\theta'$ the parameters of the proposed model, $l(d|...)$ the likelihood of data $d$, $p(...)$ the prior and $q(a|b)$ the proposal probability of moving to state $a$ from state $b$.
+where $\theta$ are the parameters of the current model, $\theta'$ the parameters of the proposed model, $l(x|...)$ the likelihood of data $x$, $p(...)$ the prior and $q(a|b)$ the proposal probability of moving to state $a$ from state $b$.
 
 This holds for any samples that are proposed within the model. The Reversible Jump MCMC sampler allows jumps between models with different numbers of parameters, accepting said moves using:
 
 \begin{equation}\label{eq:rj_a}
-a_{rj} = \frac{l(d|\theta')p(\theta')}{l(d|\theta)p(\theta)q(u)}|J|
+a_{rj} = \frac{l(x|\theta')p(\theta')}{l(x|\theta)p(\theta)q(u)}|J|
 \end{equation}
 where there are dimension matching terms in the form of $q(u)$ to account for the different number of parameters of each model. In addition, a Jacobian term $J$ is used to adjust the probability measure according to the parameter transformations, however this term is often 1 and can be safely ignored.
 
 To elaborate further on the reversible jump move, we will consider an example. Typically to add a new ring to the model, the new ring parameters are constructed using random numbers $u\sim g()$ (meaning, $u$ is drawn from the distribution $g()$), which are then turned into the ring parameters via a transformation of the current model parameters $\theta_{new} = f(u,\theta)$. If we draw the new ring parameters direct from the prior distributions, then $\theta_{new} = u\sim p()$, and we can replace $q(u)$ in~\ref{eq:rj_a} with $p(\theta_{new})$. Now, we have $p(\theta')=p(\theta)+p(\theta_{new})$, where the $p(\theta_{new})$ term cancels with the proposal function $q(u) = p(\theta_{new})$ on the denominator. As there are no transformation of variables involved, the Jacobian term is 1, thus, the acceptance probility reduces to a simple likelihood ratio for this move. For the cases where new ring parameters are not drawn from the prior distribution, the $q(u)$ and $J$ terms ensure detailed balance in the chain.
 
 \section{A Bayesian Model for Cherenkov Rings in a Neutrino Event}
-In fiTQun, the predicted charge and time for each ring are parameterized as having a vertex $x,y,z,t$, direction $\theta,\phi$, momentum $p$ and particle identification (PID) $PID$ (discrete variable).
+In fiTQun, the predicted charge and time for each ring are parameterized as having a vertex $x,y,z,t$, direction $\theta,\phi$, momentum $p$ and particle identification (PID) $PID$ (discrete variable). The ring also has an energy loss parameter $E_{loss}$ in the case of a MIP particle that undergoes scattering. The $E_{loss}$ parameter is within the range $[0.01,1.0]$ and describes the fraction of total visible energy that the particle deposited in the detector.
 
 The vertex position parameters have Gaussian priors centered at 0, with a width equal to the diagonal distance across the SK tank for position, and the vertex time parameter has a mean of 1000 $ns$ with a width the size of the time window (usually around 500 $ns$).
 
@@ -119,26 +120,88 @@ p = p_{thr}(PID) + Energy2Momentum(E_{vis}w_{i}, PID)
 
 The weights $w$ of all rings must always sum to unity. To enforce this, we choose a Dirichlet prior for $w$. $E_{vis}$ has a Gaussian prior centered at 1000 with a width of $x$. The momentum $p$ is now a function of $E_{vis}$, $w_{i}$ and $PID$, so it does not receive its own prior.
 
-In this construction, the number of rings (components) $k$ is not fixed; it is allowed to change depending on the reversible jump sampler to propose correct transitions from $k$ to $k\pm1$ components. Therefore, as a variable, we choose a poisson prior with a mean of 1 for $k$.
+In this construction, the number of rings (components) $k$ is not fixed; it is allowed to change depending on the reversible jump sampler to propose correct transitions from $k$ to $k\pm1$ components. Therefore, as a variable, we choose a Poisson prior with a mean of 1 for $k$.
+
+Eloss parameter.
 
 The PID parameter is a discrete positive integer, with each value having equal probability.
 
 \section{Sampler Move Types}
-\subsection{Within Model Move}
-\subsection{Between Model Move}
-\subsubsection{Birth Move}
-The birth move adds a ring to the model using one of the birth moves explained below.
-\subsubsection{Death Move}
-The death move removes a randomly selected ring from the model.
-\subsubsection{Draw from Prior Birth Move}
-\subsubsection{Add-on-end Birth Move}
-There is a high likelihood that multi ring events will have ring vertices downstream from other rings. We can construct a more efficient move to take advantage of this knowledge, by proposing new vertex position $v'$ and time $t'$ parameters along the direction of a ring chosen at random:
+At each MCMC step, a move is selected at random from all possible moves:
 
+\begin{itemize}
+\item Update $x,y,z,t,\theta,\phi$
+\item Update $E_{vis}$
+\item Update PID
+\item Birth/death move
+\item Split/merge move
+\item Update $E_{loss}$
+\end{itemize}
+
+The probability of each move occuring is a tuneable parameter. The move types are \emph{within-model} or \emph{between-model} moves, depending on whether they change the number of rings or not.
+
+\subsection{Within Model Move}
+The within-model moves follows a standard Metropolis-Hastings algorithm, where each parameter is updated using a random sample $u$ from their corresponding proposal distribution $q()$. The proposal distribution is then used in the acceptance probability~\ref{eq:mh} to ensure detailed balance. If $q()$ is symmetric (e.g. Gaussian), then the proposal terms in~\ref{eq:mh} cancel. 
+
+The $x,y,z,t,\theta,\phi,E_{vis}$ and $E_{loss}$ parameters all follow this simple formula, using Gaussian distributions with tuneable parameters $\sigma_{i}$ as widths.
+
+Additionally, to increase the acceptance rate in the case of a large number of rings, the step sizes $\sigma_{i}$ are scaled by a factor $1/\sqrt{k}$.
+
+The weights are updated following 
 \begin{equation}
-u\sim g() \qquad v' = v + ud\qquad t' = t + (ud)n_{wtr}c^{-1}.
+u_{i}\sim g()\qquad w'_{i} = w_{i}e^{u_{i}}.
+\end{equation}
+The weights are then normalized to 1. The proposal term is calculated THIS IS WRONG $p_{prop}=\sum^{k}_{i=1}w'_{i}-w_{i}$
+
+\subsection{Between Model Move}
+\subsubsection{Birth/death Move}
+When the \emph{birth/death move} is chosen, the decision to either add or remove a ring is made probabilistically. The birth probability $p_{birth}$ can be adjusted to improve mixing, however the acceptance probability must be adjusted to reflect that $p_{birth}\neq 0.5$ by multiplying by $p_{birth} / (1 - p_{birth})$. Additionally, when $k=1 (k_{max})$, $p_{birth} = 1 (0)$. 
+
+
+The birth move adds a ring to the model using one of the birth moves explained in sections~\ref{drawfromprior} and~\ref{addonend}.
+The death move removes a randomly selected ring from the model. The acceptance for the death move is $a_{death} = a_{birth}^{-1}$, where $a_{birth}$ is the acceptance for the \emph{draw from prior} move~\ref{eq:drawfromprior}, with $w_{birth}$ replaced with the weight of the removed ring $w_{death}$.
+
+\subsubsection{Draw from Prior Birth Move}\label{drawfromprior}
+This move was described in section~\ref{rjsampler}, so there a few details left to talk about. The Jacobian term is no longer 1 due to the Dirichlet nature of the weight parameter. The acceptance (to be used with equation~\ref{eq:ap}) is defined as
+
+\begin{equation}\label{eq:drawfromprior}
+a_{prior draw} = \frac{l(x|\theta')} {l(x|\theta)q(w_{birth})}(1-w_{birth})^{k-1}
 \end{equation}
 
-All other parameters are drawn from the prior, and are simple to implement.
+where $w_{birth}$ is the weight of the new ring, $q()$ is a Beta distribution $B(1,k)$ and $k$ the number of components before the move was attempted.
+
+\subsubsection{Add-on-end Birth Move}\label{addonend}
+There is a high likelihood that multi ring events will have ring vertices downstream from other rings. We can construct a more efficient move to take advantage of this knowledge, by proposing a new vertex position $v'=\{x,y,z\}$ and time $t'$ parameters along the direction $d=\{d_{x},d_{y},d_{z}\}$ of a ring chosen at random:
+
+\begin{equation}
+u\sim g() \qquad v' = v + ud\qquad t' = t + (ud)n_{wtr}c^{-1}
+\end{equation}
+where $u$ is a random sample from $g()$ that defines exactly how far along the direction we will add the new ring, $n_{wtr}$ is the refractive index of water, and $c$ the speed of light.
+
+The new ring weight is decided by sampling from a beta distribution $w^{*}\sim B(1,k)$, then the existing rings are scaled down according to $w'_{i}=(1-w^{*})w_{i}$, to ensure that the weights sum to unity.
+All other parameters are drawn from their prior distributions.
+
+The Jacobian $|J|$ of this move is simple to calculate. For the vertex parameters, the Jacobian is the direction component:
+
+\begin{equation}
+{\setstretch{2.0}
+ |J| = \left| \begin{array}{ccc}
+\frac{\partial v'}{\partial v} & \frac{\partial v'}{\partial u}  \\
+\frac{\partial v}{\partial v} & \frac{\partial v}{\partial u}  \end{array} \right| = 
+\left| \begin{array}{ccc}
+1 & d \\
+1 & 0 
+\end{array} \right| = -d
+}
+\end{equation}
+and similarly for the time parameter, we find $|J| = -n_{wtr}c^{-1}$. The weight Jacobian term is $(1-w^{*})^{k-1}$. The Jacobian for all other parameters is 1. The acceptance for the add-on-end move is:
+
+\begin{equation}\label{eq:addonend}
+a_{addonend} = \frac{l(x|\theta')p(\theta')} {l(x|\theta)p(\theta)q_{vertex}(u)^{4}q_{direction}(\theta,\phi)q_{w}(w_{birth})}(-d)n_{wtr}c^{-1}(1-w_{birth})^{k-1}
+\end{equation}
+
+\section{Performance}
+Here we will discuss the performance of the Mixture Model fitter.
 
 \bibliography{bib}{}
 \bibliographystyle{plain}
