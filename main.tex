@@ -55,7 +55,7 @@
 
 %%% The "real" document content comes below...
 
-\title{fiTQun RJMCMC}
+\title{fiTQun RJMCMC Documentation}
 \author{Richard Calland}
 %\date{} % Activate to display a given date or no date (if empty),
          % otherwise the current date is printed 
@@ -97,7 +97,7 @@ This holds for any samples that are proposed within the model. The Reversible Ju
 \begin{equation}\label{eq:rj_a}
 a_{rj} = \frac{l(x|\theta')p(\theta')}{l(x|\theta)p(\theta)q(u)}|J|
 \end{equation}
-where there are dimension matching terms in the form of $q(u)$ to account for the different number of parameters of each model. In addition, a Jacobian term $J$ is used to adjust the probability measure according to the parameter transformations, however this term is often 1 and can be safely ignored.
+where there are dimension matching terms in the form of $q(u)$ to account for the different number of parameters of each model. In addition, a Jacobian term $J$ is used to adjust the probability measure according to the parameter transformations, however this term is often 1.
 
 To elaborate further on the reversible jump move, we will consider an example. Typically to add a new ring to the model, the new ring parameters are constructed using random numbers $u\sim g()$ (meaning, $u$ is drawn from the distribution $g()$), which are then turned into the ring parameters via a transformation of the current model parameters $\theta_{new} = f(u,\theta)$. If we draw the new ring parameters direct from the prior distributions, then $\theta_{new} = u\sim p()$, and we can replace $q(u)$ in~\ref{eq:rj_a} with $p(\theta_{new})$. Now, we have $p(\theta')=p(\theta)+p(\theta_{new})$, where the $p(\theta_{new})$ term cancels with the proposal function $q(u) = p(\theta_{new})$ on the denominator. As there are no transformation of variables involved, the Jacobian term is 1, thus, the acceptance probility reduces to a simple likelihood ratio for this move. For the cases where new ring parameters are not drawn from the prior distribution, the $q(u)$ and $J$ terms ensure detailed balance in the chain.
 
@@ -118,7 +118,13 @@ To allow the chain to mix properly between different states of PID and momentum,
 p = p_{thr}(PID) + Energy2Momentum(E_{vis}w_{i}, PID)
 \end{equation}
 
-The weights $w$ of all rings must always sum to unity. To enforce this, we choose a Dirichlet prior for $w$. $E_{vis}$ has a Gaussian prior centered at 1000 with a width of $x$. The momentum $p$ is now a function of $E_{vis}$, $w_{i}$ and $PID$, so it does not receive its own prior.
+The weights $w$ of all rings must always sum to unity. We choose a Dirichlet prior for $w$ to reflect this:
+\begin{equation}
+Dir(w,\alpha) = \frac{1}{B(\alpha)} \prod_{i=1}^{k}w_{i}^{\alpha-1}
+\end{equation}
+where the concentration parameter $\alpha$ controls the distribution of weight parameters. For example, $\alpha < 1$ would favour uneven distributions of weights, $\alpha>1$ would favour all weights to have similar values, and $\alpha=1$ places no preference on weight values.
+
+ $E_{vis}$ has a Gaussian prior centered at 1000 with a width of $x$. The momentum $p$ is now a function of $E_{vis}$, $w_{i}$ and $PID$, so it does not receive its own prior.
 
 In this construction, the number of rings (components) $k$ is not fixed; it is allowed to change depending on the reversible jump sampler to propose correct transitions from $k$ to $k\pm1$ components. Therefore, as a variable, we choose a Poisson prior with a mean of 1 for $k$.
 
@@ -153,6 +159,8 @@ u_{i}\sim g()\qquad w'_{i} = w_{i}e^{u_{i}}.
 \end{equation}
 The weights are then normalized to 1. The proposal term is calculated THIS IS WRONG $p_{prop}=\sum^{k}_{i=1}w'_{i}-w_{i}$
 
+When the update PID move is selected, a randomly selected ring has its PID parameter value resampled from the prior. Additionally, to assist the chain in moving between PID hypotheses, the vertex and time parameters are shifted according to a predetermined distribution. This distribution is generated from 1 ring fits for all PID hypotheses to the same set of single ring particle gun samples.
+
 \subsection{Between Model Move}
 \subsubsection{Birth/death Move}
 When the \emph{birth/death move} is chosen, the decision to either add or remove a ring is made probabilistically. The birth probability $p_{birth}$ can be adjusted to improve mixing, however the acceptance probability must be adjusted to reflect that $p_{birth}\neq 0.5$ by multiplying by $p_{birth} / (1 - p_{birth})$. Additionally, when $k=1 (k_{max})$, $p_{birth} = 1 (0)$. 
@@ -176,7 +184,7 @@ There is a high likelihood that multi ring events will have ring vertices downst
 \begin{equation}
 u\sim g() \qquad v' = v + ud\qquad t' = t + (ud)n_{wtr}c^{-1}
 \end{equation}
-where $u$ is a random sample from $g()$ that defines exactly how far along the direction we will add the new ring, $n_{wtr}$ is the refractive index of water, and $c$ the speed of light.
+where $u$ is a random sample from $g()$ that defines exactly how far along the direction we will add the new ring, $n_{wtr}$ is the refractive index of water, and $c$ the speed of light. For this analysis, the vertex proposal distribution from the within-model move is used in place of $g()$.
 
 The new ring weight is decided by sampling from a beta distribution $w^{*}\sim B(1,k)$, then the existing rings are scaled down according to $w'_{i}=(1-w^{*})w_{i}$, to ensure that the weights sum to unity.
 All other parameters are drawn from their prior distributions.
@@ -200,8 +208,14 @@ and similarly for the time parameter, we find $|J| = -n_{wtr}c^{-1}$. The weight
 a_{addonend} = \frac{l(x|\theta')p(\theta')} {l(x|\theta)p(\theta)q_{vertex}(u)^{4}q_{direction}(\theta,\phi)q_{w}(w_{birth})}(-d)n_{wtr}c^{-1}(1-w_{birth})^{k-1}
 \end{equation}
 
-\section{Performance}
-Here we will discuss the performance of the Mixture Model fitter.
+\section{Post Processing}
+The output of the RJMCMC sampler is not immediately useful. In order to extract information to pass onwards to physics analyses, the samples produced by the RJMCMC must be processed.
+
+The RJMCMC output is a set of samples from parameter space, including samples from models with different numbers of rings $k$~\ref{plot:nrings}. We wish to extrac the most likely number of rings, and the most likely parameter values for each of those rings. The first step is to determine the most likely number of rings, and condition the Posterior on that. This is done by simply constructing a histogram of $k$, selecting the bin with the most entries $k_{MAP}$, and disposing of samples where $k\neq k_{MAP}$ (\emph{MAP} = \emph{maximum a posteriori}).
+
+Now we have a set of samples that have the same number of rings, so the next step is to group all parameters together that correspond to the same ring. This is non-trivial because the ordering of the rings may change between samples due to the RJMCMC's ability to add and remove rings. The solution taken here is to step through each sample, and reorder the rings in each sample based on some metric. The simplest metric to use would be ordering by weight $w$, where the ring with the lowest weight is "ring 1", the second lowest is "ring 2" etc. However, this solution has issues when two rings have similar weights, causing samples to be misidentified. As the direction parameters are relatively well constrained, the Posterior probability distributions are narrow and the chances of overlap is much smaller than that for the weight parameter. Thus, the ordering metric chosen is the distance from an arbitrary fixed position in 2D $\theta\phi$ space.
+
+The samples for individual rings have now been grouped together, and so now the ring parameters can be estimated by constructing 1D histograms for each parameter, and finding the maximum.
 
 \bibliography{bib}{}
 \bibliographystyle{plain}
