@@ -109,8 +109,9 @@ The vertex position parameters have Gaussian priors centered at 0, with a width 
 The direction paramters use spherical coordinates, and have a prior that loses probability near the poles.
 
 \begin{equation}
-i am a spherical prior
+p(\theta) = \frac{(cos(\theta) + 1)}{2\pi}\qquad p(\phi) = \frac{1}{2\pi}.
 \end{equation}
+This form ensures that the probability density on the sphere is constant.
 
 To allow the chain to mix properly between different states of PID and momentum, we reparameterize such that there is a global visible energy $E_{vis}$ parameter, which is distributed amongst the rings using the component weight $w_{i}$ from~\ref{eq:mm}. Using the rings visible energy $E_{vis}w_{i}$, the momentum is determined by considering the momentum threshold of the PID:
 
@@ -173,7 +174,7 @@ The death move removes a randomly selected ring from the model. The acceptance f
 This move was described in section~\ref{rjsampler}, so there a few details left to talk about. The Jacobian term is no longer 1 due to the Dirichlet nature of the weight parameter. The acceptance (to be used with equation~\ref{eq:ap}) is defined as
 
 \begin{equation}\label{eq:drawfromprior}
-a_{prior draw} = \frac{l(x|\theta')} {l(x|\theta)q(w_{birth})}(1-w_{birth})^{k-1}
+a_{prior draw} = \frac{l(x|\theta')p(w')} {l(x|\theta)p(w)q(w_{birth})}(1-w_{birth})^{k-1}
 \end{equation}
 
 where $w_{birth}$ is the weight of the new ring, $q()$ is a Beta distribution $B(1,k)$ and $k$ the number of components before the move was attempted.
@@ -182,7 +183,7 @@ where $w_{birth}$ is the weight of the new ring, $q()$ is a Beta distribution $B
 There is a high likelihood that multi ring events will have ring vertices downstream from other rings. We can construct a more efficient move to take advantage of this knowledge, by proposing a new vertex position $v'=\{x,y,z\}$ and time $t'$ parameters along the direction $d=\{d_{x},d_{y},d_{z}\}$ of a ring chosen at random:
 
 \begin{equation}
-u\sim g() \qquad v' = v + ud\qquad t' = t + (ud)n_{wtr}c^{-1}
+u\sim g() \qquad v' = v + ud\qquad t' = t + un_{wtr}c^{-1}
 \end{equation}
 where $u$ is a random sample from $g()$ that defines exactly how far along the direction we will add the new ring, $n_{wtr}$ is the refractive index of water, and $c$ the speed of light. For this analysis, the vertex proposal distribution from the within-model move is used in place of $g()$.
 
